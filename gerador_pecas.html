@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gerador de Documento de Peças</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; background: #f0f0f0; display: flex; height: 100vh; overflow: hidden; }
+
+/* SIDEBAR */
+#sidebar {
+  width: 300px; min-width: 300px; background: #fff; border-right: 1px solid #ddd;
+  display: flex; flex-direction: column; overflow-y: auto; padding: 16px; gap: 12px;
+}
+#sidebar h2 { font-size: 11px; font-weight: bold; color: #888; text-transform: uppercase; letter-spacing: 0.06em; }
+label { font-size: 12px; color: #555; display: block; margin-bottom: 3px; }
+input, select { width: 100%; font-size: 13px; padding: 6px 8px; border: 1px solid #ccc; border-radius: 5px; background: #fafafa; color: #222; }
+input:focus { outline: none; border-color: #888; background: #fff; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.btn { width: 100%; padding: 8px; font-size: 13px; border-radius: 5px; border: 1px solid #ccc; cursor: pointer; background: #fff; color: #222; }
+.btn:hover { background: #f5f5f5; }
+.btn-add { background: #222; color: #fff; border-color: #222; }
+.btn-add:hover { background: #444; }
+.btn-print { background: #1a6abf; color: #fff; border-color: #1a6abf; }
+.btn-print:hover { background: #155299; }
+.btn-clear { color: #a00; border-color: #f0c0c0; }
+.btn-clear:hover { background: #fff0f0; }
+.divider { height: 1px; background: #eee; }
+.piece-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 10px; border: 1px solid #eee; border-radius: 5px;
+  font-size: 12px; background: #fafafa;
+}
+.piece-item .num { font-weight: bold; color: #333; margin-right: 6px; }
+.piece-item .info { color: #555; flex: 1; }
+.piece-item .del { color: #c00; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 2px; }
+.piece-item .del:hover { color: #f00; }
+
+/* CANVAS */
+#canvas-area {
+  flex: 1; overflow: auto; padding: 32px; display: flex; justify-content: center; align-items: flex-start;
+  background: #d8d8d8;
+}
+
+/* DOCUMENT */
+#doc-page {
+  background: white; width: 794px; min-height: 1123px;
+  padding: 48px 48px 48px 48px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+  font-family: Arial, sans-serif;
+}
+.doc-header { border-bottom: 2px solid #333; padding-bottom: 12px; margin-bottom: 32px; }
+.doc-title { font-size: 15px; font-weight: bold; color: #222; }
+.doc-sub { font-size: 11px; color: #666; margin-top: 4px; }
+
+.pieces-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px 48px; }
+
+.piece-block { display: flex; flex-direction: column; gap: 4px; }
+.piece-header { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: bold; color: #222; }
+.num-circle {
+  width: 22px; height: 22px; border: 1.5px solid #333; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; flex-shrink: 0;
+}
+.piece-polimento { font-size: 10px; color: #444; text-align: center; margin-top: 2px; }
+.empty-hint { color: #bbb; font-size: 13px; text-align: center; padding: 60px 0; grid-column: span 2; }
+
+/* PRINT */
+@media print {
+  body { background: white; height: auto; overflow: visible; }
+  #sidebar { display: none; }
+  #canvas-area { padding: 0; background: white; overflow: visible; }
+  #doc-page { box-shadow: none; min-height: auto; width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div>
+    <h2>Documento</h2>
+  </div>
+  <div>
+    <label>Título</label>
+    <input id="doc-title" type="text" value="LISTA DE PEÇAS">
+  </div>
+  <div>
+    <label>Subtítulo / Projeto</label>
+    <input id="doc-sub" type="text" value="Material: Granito Branco Siena">
+  </div>
+
+  <div class="divider"></div>
+  <h2>Nova peça</h2>
+
+  <div class="row2">
+    <div>
+      <label>Comprimento (m)</label>
+      <input id="in-comp" type="number" step="0.01" value="1.52">
+    </div>
+    <div>
+      <label>Espessura (m)</label>
+      <input id="in-esp" type="number" step="0.001" value="0.21">
+    </div>
+  </div>
+  <div class="row2">
+    <div>
+      <label>Polimento</label>
+      <input id="in-pol" type="text" value="POLIDO LISO">
+    </div>
+    <div>
+      <label>Quantidade</label>
+      <input id="in-qty" type="number" min="1" value="1">
+    </div>
+  </div>
+  <button class="btn btn-add" onclick="addPiece()">+ Adicionar peça</button>
+
+  <div class="divider"></div>
+  <h2>Peças (<span id="count">0</span>)</h2>
+  <div id="piece-list" style="display:flex;flex-direction:column;gap:5px;"></div>
+
+  <div class="divider"></div>
+  <button class="btn btn-print" onclick="window.print()">🖨 Imprimir / Salvar PDF</button>
+  <button class="btn btn-clear" onclick="clearAll()">✕ Limpar tudo</button>
+</div>
+
+<div id="canvas-area">
+  <div id="doc-page">
+    <div class="doc-header">
+      <div class="doc-title" id="render-title">LISTA DE PEÇAS</div>
+      <div class="doc-sub" id="render-sub">Material: Granito Branco Siena</div>
+    </div>
+    <div class="pieces-grid" id="pieces-grid">
+      <div class="empty-hint">Adicione peças no painel à esquerda.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+let pieces = [
+  {comp:1.32, esp:0.22, pol:"POLIDO LISO", qty:2},
+  {comp:3.19, esp:0.23, pol:"POLIDO LISO", qty:1},
+  {comp:0.89, esp:0.20, pol:"POLIDO LISO", qty:1},
+  {comp:1.52, esp:0.21, pol:"POLIDO LISO", qty:1},
+  {comp:1.52, esp:0.21, pol:"POLIDO LISO", qty:1},
+  {comp:1.32, esp:0.23, pol:"POLIDO LISO", qty:1},
+  {comp:0.77, esp:0.03, pol:"POLIDO LISO", qty:1},
+  {comp:3.02, esp:0.22, pol:"POLIDO LISO", qty:1},
+  {comp:1.22, esp:0.275, pol:"POLIDO LISO", qty:1},
+  {comp:1.53, esp:0.21, pol:"POLIDO LISO", qty:1},
+  {comp:1.52, esp:0.21, pol:"POLIDO LISO", qty:1},
+  {comp:1.30, esp:0.23, pol:"POLIDO LISO", qty:2},
+  {comp:0.77, esp:0.30, pol:"POLIDO LISO", qty:2},
+];
+
+// Draws a slab SVG. Width is proportional to comp. Thickness is FIXED visually (illustrative).
+function makeSVG(comp, esp) {
+  const SVG_W = 310;
+  const SVG_H = 80;
+
+  // Fixed visual thickness — purely illustrative
+  const THICK = 16;
+  const SKEW_X = 18;
+  const SKEW_Y = 8;
+
+  // Slab width scales with comp (min 80, max 240)
+  const minC = 0.5, maxC = 3.5;
+  const slabW = Math.round(80 + ((comp - minC) / (maxC - minC)) * 160);
+  const clamped = Math.max(80, Math.min(240, slabW));
+
+  const LEFT = 12;
+  const TOP = SVG_H - THICK - SKEW_Y - 14;
+
+  // 3 faces of the slab
+  // Front face
+  const front = [
+    [LEFT, TOP + SKEW_Y],
+    [LEFT + clamped, TOP + SKEW_Y],
+    [LEFT + clamped, TOP + SKEW_Y + THICK],
+    [LEFT, TOP + SKEW_Y + THICK]
+  ];
+  // Top face
+  const top = [
+    [LEFT, TOP + SKEW_Y],
+    [LEFT + SKEW_X, TOP],
+    [LEFT + clamped + SKEW_X, TOP],
+    [LEFT + clamped, TOP + SKEW_Y]
+  ];
+  // Right face
+  const right = [
+    [LEFT + clamped, TOP + SKEW_Y],
+    [LEFT + clamped + SKEW_X, TOP],
+    [LEFT + clamped + SKEW_X, TOP + THICK],
+    [LEFT + clamped, TOP + SKEW_Y + THICK]
+  ];
+
+  const poly = pts => pts.map(p => p.join(',')).join(' ');
+
+  // Dimension line for comprimento (along top face)
+  const dimY = TOP - 7;
+  const dimX1 = LEFT + SKEW_X;
+  const dimX2 = LEFT + clamped + SKEW_X;
+  const dimMid = (dimX1 + dimX2) / 2;
+
+  // Dimension line for espessura (right side)
+  const espX = LEFT + clamped + SKEW_X + 6;
+  const espY1 = TOP;
+  const espY2 = TOP + THICK;
+  const espMid = (espY1 + espY2) / 2;
+
+  const espStr = esp.toFixed(3).replace(/\.?0+$/, '') || esp.toString();
+
+  return `<svg viewBox="0 0 ${SVG_W} ${SVG_H}" width="${SVG_W}" height="${SVG_H}" xmlns="http://www.w3.org/2000/svg">
+  <polygon points="${poly(front)}" fill="#c9c9c9" stroke="#222" stroke-width="0.8"/>
+  <polygon points="${poly(top)}" fill="#e6e6e6" stroke="#222" stroke-width="0.8"/>
+  <polygon points="${poly(right)}" fill="#aaaaaa" stroke="#222" stroke-width="0.8"/>
+
+  <!-- comprimento dim line -->
+  <line x1="${dimX1}" y1="${dimY}" x2="${dimX2}" y2="${dimY}" stroke="#222" stroke-width="0.6"/>
+  <line x1="${dimX1}" y1="${dimY - 3}" x2="${dimX1}" y2="${dimY + 3}" stroke="#222" stroke-width="0.6"/>
+  <line x1="${dimX2}" y1="${dimY - 3}" x2="${dimX2}" y2="${dimY + 3}" stroke="#222" stroke-width="0.6"/>
+  <text x="${dimMid}" y="${dimY - 3}" text-anchor="middle" font-size="8.5" fill="#222" font-family="Arial">${comp.toFixed(2)}</text>
+
+  <!-- espessura dim line -->
+  <line x1="${espX}" y1="${espY1}" x2="${espX}" y2="${espY2}" stroke="#222" stroke-width="0.6"/>
+  <line x1="${espX - 3}" y1="${espY1}" x2="${espX + 3}" y2="${espY1}" stroke="#222" stroke-width="0.6"/>
+  <line x1="${espX - 3}" y1="${espY2}" x2="${espX + 3}" y2="${espY2}" stroke="#222" stroke-width="0.6"/>
+  <text x="${espX + 4}" y="${espMid + 3}" font-size="8.5" fill="#222" font-family="Arial">${espStr}</text>
+</svg>`;
+}
+
+function render() {
+  document.getElementById('render-title').textContent = document.getElementById('doc-title').value || 'LISTA DE PEÇAS';
+  document.getElementById('render-sub').textContent = document.getElementById('doc-sub').value || '';
+  document.getElementById('count').textContent = pieces.length;
+
+  const grid = document.getElementById('pieces-grid');
+  if (pieces.length === 0) {
+    grid.innerHTML = '<div class="empty-hint">Adicione peças no painel à esquerda.</div>';
+  } else {
+    grid.innerHTML = pieces.map((p, i) => `
+      <div class="piece-block">
+        <div class="piece-header">
+          <div class="num-circle">${String(i + 1).padStart(2, '0')}</div>
+          <span>${p.qty} UNIDADE${p.qty > 1 ? 'S' : ''}</span>
+        </div>
+        ${makeSVG(p.comp, p.esp)}
+        <div class="piece-polimento">POLIMENTO: ${p.pol}</div>
+      </div>
+    `).join('');
+  }
+
+  const list = document.getElementById('piece-list');
+  list.innerHTML = pieces.map((p, i) => `
+    <div class="piece-item">
+      <span class="num">${String(i + 1).padStart(2, '0')}</span>
+      <span class="info">${p.comp.toFixed(2)}m × ${p.esp.toFixed(3).replace(/\.?0+$/,'')}m — ${p.qty}x</span>
+      <span class="del" onclick="removePiece(${i})" title="Remover">×</span>
+    </div>
+  `).join('');
+}
+
+function addPiece() {
+  const comp = parseFloat(document.getElementById('in-comp').value);
+  const esp  = parseFloat(document.getElementById('in-esp').value);
+  const pol  = document.getElementById('in-pol').value.trim() || 'POLIDO LISO';
+  const qty  = parseInt(document.getElementById('in-qty').value) || 1;
+  if (isNaN(comp) || isNaN(esp) || comp <= 0 || esp <= 0) return;
+  pieces.push({ comp, esp, pol, qty });
+  render();
+}
+
+function removePiece(i) {
+  pieces.splice(i, 1);
+  render();
+}
+
+function clearAll() {
+  if (confirm('Limpar todas as peças?')) { pieces = []; render(); }
+}
+
+document.getElementById('doc-title').addEventListener('input', render);
+document.getElementById('doc-sub').addEventListener('input', render);
+
+render();
+</script>
+</body>
+</html>
